@@ -1,3 +1,35 @@
+# HalideX
+
+HalideX is the modified version of Halide(described as below) with two additional IRs supported,
+namely BufferLoad and BufferStore. These two IRs allow indices of load and store to remain 
+multi-dimensional rather than being flattened, thus the information can be used for further 
+loop analysis, optimizations as well as various code generations, e.g. polyhedral analysis, MLIR 
+dialects, etc..   
+
+The project was originally created to target Halide code generation to [MLIR](https://mlir.llvm.org)
+, benefiting from the multi-level dialects intrinsic which is one of the main advantages of this framework.
+With the code generation, it is able to leverage those properties and transformations which mlir 
+provides to explore more opportunities on optimization in terms of performance on the apps written in Halide.
+
+Currently, the [MLIRX](https://github.com/polymage-labs/mlirx)(beb7ccf)
+is preferred for building LLVM if the target is MLIR, to learn more about differences between MLIRX and LLVM project,
+please visit the github of MLIRX for more information.
+
+To enable the code generation to the two additional IRs, please replace the make command
+to the following one(keep the ramaining commands the same):
+```
+$ make <OPTIONAL> -f ../Halide/Makefile  
+```
+OPTIONAL:  
+`USE_MLIRX=1`:  
+- If you build llvm with mlirx(beb7ccf), then the flag 
+should be enabled to ensure the correctness of build flags.
+
+`MULTIDIM_BUFFER=1`:  
+- To enable multi-dimensional buffer. If it is not set, the build system will build the 
+default version, which is same as the original Halide.
+
+
 # Halide
 
 Halide is a programming language designed to make it easier to write
