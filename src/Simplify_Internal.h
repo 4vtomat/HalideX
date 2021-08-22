@@ -330,6 +330,7 @@ public:
     Expr visit(const Ramp *op, ExprInfo *bounds);
     Stmt visit(const IfThenElse *op);
     Expr visit(const Load *op, ExprInfo *bounds);
+    Expr visit(const BufferLoad *op, ExprInfo *bounds);
     Expr visit(const Call *op, ExprInfo *bounds);
     Expr visit(const Shuffle *op, ExprInfo *bounds);
     Expr visit(const VectorReduce *op, ExprInfo *bounds);
@@ -339,6 +340,7 @@ public:
     Stmt visit(const For *op);
     Stmt visit(const Provide *op);
     Stmt visit(const Store *op);
+    Stmt visit(const BufferStore *op);
     Stmt visit(const Allocate *op);
     Stmt visit(const Evaluate *op);
     Stmt visit(const ProducerConsumer *op);

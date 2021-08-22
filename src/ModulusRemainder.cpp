@@ -54,6 +54,7 @@ public:
     void visit(const Not *) override;
     void visit(const Select *) override;
     void visit(const Load *) override;
+    void visit(const BufferLoad *) override;
     void visit(const Ramp *) override;
     void visit(const Broadcast *) override;
     void visit(const Call *) override;
@@ -64,6 +65,7 @@ public:
     void visit(const For *) override;
     void visit(const Acquire *) override;
     void visit(const Store *) override;
+    void visit(const BufferStore *) override;
     void visit(const Provide *) override;
     void visit(const Allocate *) override;
     void visit(const Realize *) override;
@@ -180,6 +182,10 @@ void ComputeModulusRemainder::visit(const Load *) {
     result = ModulusRemainder{};
 }
 
+void ComputeModulusRemainder::visit(const BufferLoad *) {
+    result = ModulusRemainder{};
+}
+
 void ComputeModulusRemainder::visit(const Ramp *) {
     internal_error << "modulus_remainder of vector\n";
 }
@@ -234,6 +240,10 @@ void ComputeModulusRemainder::visit(const Acquire *) {
 }
 
 void ComputeModulusRemainder::visit(const Store *) {
+    internal_error << "modulus_remainder of statement\n";
+}
+
+void ComputeModulusRemainder::visit(const BufferStore *) {
     internal_error << "modulus_remainder of statement\n";
 }
 

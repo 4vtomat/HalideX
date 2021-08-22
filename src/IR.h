@@ -221,6 +221,32 @@ struct Load : public ExprNode<Load> {
     static const IRNodeType _node_type = IRNodeType::Load;
 };
 
+struct BufferLoad : public ExprNode<BufferLoad> {
+    std::string name;
+
+    std::vector<Expr> index;
+    Expr predicate;
+
+    // If it's a load from an image argument or compiled-in constant
+    // image, this will point to that
+    Buffer<> image;
+
+    // If it's a load from an image parameter, this points to that
+    Parameter param;
+
+    // The alignment of the index. If the index is a vector, this is
+    // the alignment of the first lane.
+    ModulusRemainder alignment;
+
+    static Expr make(Type type, const std::string &name,
+                     std::vector<Expr> index, Buffer<> image,
+                     Parameter param,
+                     Expr predicate,
+                     ModulusRemainder alignment);
+
+    static const IRNodeType _node_type = IRNodeType::BufferLoad;
+};
+
 /** A linear ramp vector node. This is vector with 'lanes' elements,
  * where element i is 'base' + i*'stride'. This is a convenient way to
  * pass around vectors without busting them up into individual
@@ -326,6 +352,23 @@ struct Store : public StmtNode<Store> {
                      Parameter param, Expr predicate, ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Store;
+};
+
+struct BufferStore : public StmtNode<BufferStore> {
+    std::string name;
+    Expr predicate, value;
+    std::vector<Expr> index;
+    // If it's a store to an output buffer, then this parameter points to it.
+    Parameter param;
+
+    // The alignment of the index. If the index is a vector, this is
+    // the alignment of the first lane.
+    ModulusRemainder alignment;
+
+    static Stmt make(const std::string &name, Expr value, std::vector<Expr> index,
+                     Parameter param, Expr predicate, ModulusRemainder alignment);
+
+    static const IRNodeType _node_type = IRNodeType::BufferStore;
 };
 
 /** This defines the value of a function at a multi-dimensional

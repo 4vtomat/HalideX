@@ -375,5 +375,49 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     }
 }
 
+Expr Simplify::visit(const BufferLoad *op, ExprInfo *bounds) {
+    found_buffer_reference(op->name);
+
+    Expr predicate = mutate(op->predicate, nullptr);
+
+    ExprInfo index_info;
+    std::vector<Expr> index;
+    for (auto i : op->index) {
+      index.push_back(mutate(i, &index_info));
+    }
+
+    // If the load is fully out of bounds, replace it with undef.
+    // This should only occur inside branches that make the load unreachable,
+    // but perhaps the branch was hard to prove constant true or false. This
+    // provides an alternative mechanism to simplify these unreachable loads.
+    string alloc_extent_name = op->name + ".total_extent_bytes";
+    if (bounds_and_alignment_info.contains(alloc_extent_name)) {
+        if (index_info.max_defined && index_info.max < 0) {
+            in_unreachable = true;
+            return unreachable(op->type);
+        }
+        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
+        if (alloc_info.max_defined && index_info.min_defined) {
+            int index_min_bytes = index_info.min * op->type.bytes();
+            if (index_min_bytes > alloc_info.max) {
+                in_unreachable = true;
+                return unreachable(op->type);
+            }
+        }
+    }
+
+    ExprInfo base_info;
+    base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
+
+    ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
+
+    if (is_const_zero(predicate)) {
+        // Predicate is always false
+        return undef(op->type);
+    } else {
+        return BufferLoad::make(op->type, op->name, index, op->image, op->param, predicate, align);
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide

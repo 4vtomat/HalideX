@@ -37,7 +37,23 @@ class RemoveDeadAllocations : public IRMutator {
         return IRMutator::visit(op);
     }
 
+    Expr visit(const BufferLoad *op) override {
+        if (allocs.contains(op->name)) {
+            allocs.pop(op->name);
+        }
+
+        return IRMutator::visit(op);
+    }
+
     Stmt visit(const Store *op) override {
+        if (allocs.contains(op->name)) {
+            allocs.pop(op->name);
+        }
+
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const BufferStore *op) override {
         if (allocs.contains(op->name)) {
             allocs.pop(op->name);
         }

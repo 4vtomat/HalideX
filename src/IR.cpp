@@ -249,6 +249,22 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     return node;
 }
 
+Expr BufferLoad::make(Type type, const std::string &name, std::vector<Expr> index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
+    internal_assert(predicate.defined()) << "Load with undefined predicate\n";
+    internal_assert(type.lanes() == predicate.type().lanes())
+        << name << ": Vector lanes of Load must match vector lanes of predicate\n";
+
+    BufferLoad *node = new BufferLoad;
+    node->type = type;
+    node->name = name;
+    node->predicate = std::move(predicate);
+    node->index = std::move(index);
+    node->image = std::move(image);
+    node->param = std::move(param);
+    node->alignment = alignment;
+    return node;
+}
+
 Expr Ramp::make(Expr base, Expr stride, int lanes) {
     internal_assert(base.defined()) << "Ramp of undefined\n";
     internal_assert(stride.defined()) << "Ramp of undefined\n";
@@ -362,6 +378,25 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
         << "Vector lanes of Store must match vector lanes of predicate\n";
 
     Store *node = new Store;
+    node->name = name;
+    node->predicate = std::move(predicate);
+    node->value = std::move(value);
+    node->index = std::move(index);
+    node->param = std::move(param);
+    node->alignment = alignment;
+    return node;
+}
+
+Stmt BufferStore::make(const std::string &name, Expr value, std::vector<Expr> index, Parameter param, Expr predicate, ModulusRemainder alignment) {
+    internal_assert(predicate.defined()) << "Store with undefined predicate\n";
+    internal_assert(value.defined()) << "Store of undefined\n";
+    for (auto& i: index) {
+      internal_assert(i.defined()) << "Store of undefined\n";
+    }
+    // internal_assert(value.type().lanes() == predicate.type().lanes())
+    //     << "Vector lanes of Store must match vector lanes of predicate\n";
+
+    BufferStore *node = new BufferStore;
     node->name = name;
     node->predicate = std::move(predicate);
     node->value = std::move(value);
@@ -1042,6 +1077,10 @@ void ExprNode<Load>::accept(IRVisitor *v) const {
     v->visit((const Load *)this);
 }
 template<>
+void ExprNode<BufferLoad>::accept(IRVisitor *v) const {
+    v->visit((const BufferLoad *)this);
+}
+template<>
 void ExprNode<Ramp>::accept(IRVisitor *v) const {
     v->visit((const Ramp *)this);
 }
@@ -1084,6 +1123,10 @@ void StmtNode<For>::accept(IRVisitor *v) const {
 template<>
 void StmtNode<Store>::accept(IRVisitor *v) const {
     v->visit((const Store *)this);
+}
+template<>
+void StmtNode<BufferStore>::accept(IRVisitor *v) const {
+    v->visit((const BufferStore *)this);
 }
 template<>
 void StmtNode<Provide>::accept(IRVisitor *v) const {
@@ -1227,6 +1270,10 @@ Expr ExprNode<Load>::mutate_expr(IRMutator *v) const {
     return v->visit((const Load *)this);
 }
 template<>
+Expr ExprNode<BufferLoad>::mutate_expr(IRMutator *v) const {
+    return v->visit((const BufferLoad *)this);
+}
+template<>
 Expr ExprNode<Ramp>::mutate_expr(IRMutator *v) const {
     return v->visit((const Ramp *)this);
 }
@@ -1270,6 +1317,10 @@ Stmt StmtNode<For>::mutate_stmt(IRMutator *v) const {
 template<>
 Stmt StmtNode<Store>::mutate_stmt(IRMutator *v) const {
     return v->visit((const Store *)this);
+}
+template<>
+Stmt StmtNode<BufferStore>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const BufferStore *)this);
 }
 template<>
 Stmt StmtNode<Provide>::mutate_stmt(IRMutator *v) const {

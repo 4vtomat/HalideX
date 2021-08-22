@@ -458,6 +458,16 @@ class DerivativeBounds : public IRVisitor {
         }
     }
 
+    void visit(const BufferLoad *op) override {
+      for (const auto& index : op->index) {
+        index.accept(this);
+        if (!is_constant(result)) {
+            result = ConstantInterval::everything();
+            break;
+        }
+      }
+    }
+
     void visit(const Ramp *op) override {
         Expr equiv = op->base + Variable::make(op->base.type(), unique_name('t')) * op->stride;
         equiv.accept(this);
@@ -572,6 +582,10 @@ class DerivativeBounds : public IRVisitor {
     }
 
     void visit(const Store *op) override {
+        internal_error << "Monotonic of statement\n";
+    }
+
+    void visit(const BufferStore *op) override {
         internal_error << "Monotonic of statement\n";
     }
 

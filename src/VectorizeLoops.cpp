@@ -311,6 +311,18 @@ class RewriteAccessToVectorAlloc : public IRMutator {
         }
     }
 
+    std::vector<Expr> mutate_index(const string &a, const std::vector<Expr>& index) {
+      std::vector<Expr> mutated_index;
+      for (auto ind : index) {
+        Expr temp = mutate(ind);
+        if (a == alloc) {
+            temp = temp * lanes + var;
+        }
+        mutated_index.push_back(temp);
+      }
+      return mutated_index;
+    }
+
     ModulusRemainder mutate_alignment(const string &a, const ModulusRemainder &align) {
         if (a == alloc) {
             return align * lanes;
@@ -324,9 +336,19 @@ class RewriteAccessToVectorAlloc : public IRMutator {
                           op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
     }
 
+    Expr visit(const BufferLoad *op) override {
+        return BufferLoad::make(op->type, op->name, mutate_index(op->name, op->index),
+                          op->image, op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
+    }
+
     Stmt visit(const Store *op) override {
         return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
                            op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
+    }
+
+    Stmt visit(const BufferStore *op) override {
+        return BufferStore::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
+                                 op->param, mutate(op->predicate), mutate_alignment(op->name, op->alignment));
     }
 
 public:
@@ -630,6 +652,28 @@ class VectorSubs : public IRMutator {
         }
     }
 
+    Expr visit(const BufferLoad *op) override {
+        Expr predicate = mutate(op->predicate);
+        int vector_lanes = 0;
+        std::vector<Expr> index;
+        for (size_t i = 0; i < op->index.size(); ++i) {
+          index.push_back(mutate(op->index[i]));
+          vector_lanes = std::max(vector_lanes, index[i].type().lanes());
+        }
+
+        bool same_index = true;
+        for (size_t i = 0; i < op->index.size(); ++i) {
+          same_index &= op->index[i].same_as(index[i]);
+        }
+
+        if (predicate.same_as(op->predicate) && same_index) {
+            return op;
+        } else {
+            return BufferLoad::make(op->type.with_lanes(vector_lanes), op->name, index, op->image,
+                              op->param, widen(predicate, vector_lanes), op->alignment);
+        }
+    }
+
     Expr visit(const Call *op) override {
         // Widen the call by changing the lanes of all of its
         // arguments and its return type
@@ -807,6 +851,33 @@ class VectorSubs : public IRMutator {
             int lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), index.type().lanes()));
             return Store::make(op->name, widen(value, lanes), widen(index, lanes),
                                op->param, widen(predicate, lanes), op->alignment);
+        }
+    }
+
+    Stmt visit(const BufferStore *op) override {
+        Expr predicate = mutate(op->predicate);
+        Expr value = mutate(op->value);
+        std::vector<Expr> index;
+        for (size_t i = 0; i < op->index.size(); ++i) {
+          index.push_back(mutate(op->index[i]));
+        }
+
+        bool same_index = true;
+        for (size_t i = 0; i < op->index.size(); ++i) {
+          same_index &= op->index[i].same_as(index[i]);
+        }
+
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && same_index) {
+            return op;
+        } else {
+          int lanes = 0;
+          for (size_t i = 0; i < op->index.size(); ++i) {
+            lanes = std::max(lanes, index[i].type().lanes());
+          }
+
+          lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), lanes));
+          return BufferStore::make(op->name, widen(value, lanes), index,
+                             op->param, widen(predicate, lanes), op->alignment);
         }
     }
 
@@ -1544,6 +1615,10 @@ class VectorizeLoops : public IRMutator {
 class AllStoresInScope : public IRVisitor {
     using IRVisitor::visit;
     void visit(const Store *op) override {
+        result = result && s.contains(op->name);
+    }
+
+    void visit(const BufferStore *op) override {
         result = result && s.contains(op->name);
     }
 

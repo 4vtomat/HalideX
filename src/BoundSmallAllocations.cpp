@@ -16,6 +16,7 @@ class BoundSmallAllocations : public IRMutator {
 
     // Track constant bounds
     Scope<Interval> scope;
+    std::map<std::string, std::vector<Expr>> bounded_allocations;
 
     template<typename T, typename Body>
     Body visit_let(const T *op) {
@@ -39,7 +40,7 @@ class BoundSmallAllocations : public IRMutator {
         result = mutate(result);
 
         for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            result = T::make(it->op->name, it->op->value, result);
+            result = T::make(it->op->name, mutate(it->op->value), result);
         }
 
         return result;
@@ -154,11 +155,74 @@ class BoundSmallAllocations : public IRMutator {
              (op->memory_type == MemoryType::Auto && size <= malloc_overhead))) {
             user_assert(size >= 0 && size < (int64_t)1 << 31)
                 << "Allocation " << op->name << " has a size greater than 2^31: " << bound << "\n";
+            bounded_allocations[op->name] = op->extents;
             return Allocate::make(op->name, op->type, op->memory_type, {(int32_t)size}, op->condition,
                                   mutate(op->body), op->new_expr, op->free_function);
         } else {
             return IRMutator::visit(op);
         }
+    }
+
+    Expr visit(const BufferLoad *op) override {
+      if (bounded_allocations.count(op->name) && op->index.size() > 0) {
+        std::vector<Expr> extents = bounded_allocations[op->name];
+        std::vector<Expr> indices = op->index;
+        int size_diff = extents.size() - indices.size();
+        if (size_diff != 0) {
+          while (size_diff--) {
+            indices.push_back(make_const(Int(64), 0));
+          }
+        }
+
+        Expr bounded_index = mutate(indices[0]);
+        Expr extent = extents[0];
+        for (size_t i = 1; i < indices.size(); ++i) {
+          bounded_index += mutate(indices[i]) * extent;
+          extent *= extents[i];
+        } 
+        return BufferLoad::make(op->type, op->name, {bounded_index}, op->image, op->param, op->predicate, op->alignment);
+      } else {
+        std::vector<Expr> indices;
+        for (auto i : op->index) {
+          indices.push_back(mutate(i));
+        }
+        if (indices.size() == 0) {
+            indices.push_back(make_const(Int(64), 0));
+        }
+        return BufferLoad::make(op->type, op->name, std::move(indices), op->image, op->param, op->predicate, op->alignment);
+      }
+    }
+
+    Stmt visit(const BufferStore *op) override {
+      if (bounded_allocations.count(op->name) && op->index.size() > 0) {
+        std::vector<Expr> extents = bounded_allocations[op->name];
+        std::vector<Expr> indices = op->index;
+        int size_diff = extents.size() - indices.size();
+        if (size_diff != 0) {
+          while (size_diff--) {
+            indices.push_back(make_const(Int(64), 0));
+          }
+        }
+
+        Expr bounded_index = mutate(indices[0]);
+        Expr extent = extents[0];
+        for (size_t i = 1; i < indices.size(); ++i) {
+          bounded_index += mutate(indices[i]) * extent;
+          extent *= extents[i];
+        } 
+
+        return BufferStore::make(op->name, mutate(op->value), {bounded_index}, op->param, op->predicate, op->alignment);
+      } else {
+        std::vector<Expr> indices;
+        for (auto i : op->index) {
+          indices.push_back(mutate(i));
+        }
+        if (indices.size() == 0) {
+            indices.push_back(make_const(Int(64), 0));
+        }
+        return BufferStore::make(op->name, mutate(op->value), std::move(indices), op->param, op->predicate, op->alignment);
+      }
+
     }
 };
 

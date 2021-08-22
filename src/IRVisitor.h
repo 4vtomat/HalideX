@@ -53,6 +53,7 @@ protected:
     virtual void visit(const Not *);
     virtual void visit(const Select *);
     virtual void visit(const Load *);
+    virtual void visit(const BufferLoad *);
     virtual void visit(const Ramp *);
     virtual void visit(const Broadcast *);
     virtual void visit(const Call *);
@@ -62,6 +63,7 @@ protected:
     virtual void visit(const ProducerConsumer *);
     virtual void visit(const For *);
     virtual void visit(const Store *);
+    virtual void visit(const BufferStore *);
     virtual void visit(const Provide *);
     virtual void visit(const Allocate *);
     virtual void visit(const Free *);
@@ -123,6 +125,7 @@ protected:
     void visit(const Not *) override;
     void visit(const Select *) override;
     void visit(const Load *) override;
+    void visit(const BufferLoad *) override;
     void visit(const Ramp *) override;
     void visit(const Broadcast *) override;
     void visit(const Call *) override;
@@ -132,6 +135,7 @@ protected:
     void visit(const ProducerConsumer *) override;
     void visit(const For *) override;
     void visit(const Store *) override;
+    void visit(const BufferStore *) override;
     void visit(const Provide *) override;
     void visit(const Allocate *) override;
     void visit(const Free *) override;
@@ -212,6 +216,8 @@ private:
             return ((T *)this)->visit((const Select *)node, std::forward<Args>(args)...);
         case IRNodeType::Load:
             return ((T *)this)->visit((const Load *)node, std::forward<Args>(args)...);
+        case IRNodeType::BufferLoad:
+            return ((T *)this)->visit((const BufferLoad *)node, std::forward<Args>(args)...);
         case IRNodeType::Ramp:
             return ((T *)this)->visit((const Ramp *)node, std::forward<Args>(args)...);
         case IRNodeType::Call:
@@ -231,6 +237,7 @@ private:
         case IRNodeType::For:
         case IRNodeType::Acquire:
         case IRNodeType::Store:
+        case IRNodeType::BufferStore:
         case IRNodeType::Provide:
         case IRNodeType::Allocate:
         case IRNodeType::Free:
@@ -277,6 +284,7 @@ private:
         case IRNodeType::Not:
         case IRNodeType::Select:
         case IRNodeType::Load:
+        case IRNodeType::BufferLoad:
         case IRNodeType::Ramp:
         case IRNodeType::Call:
         case IRNodeType::Let:
@@ -296,6 +304,8 @@ private:
             return ((T *)this)->visit((const Acquire *)node, std::forward<Args>(args)...);
         case IRNodeType::Store:
             return ((T *)this)->visit((const Store *)node, std::forward<Args>(args)...);
+        case IRNodeType::BufferStore:
+            return ((T *)this)->visit((const BufferStore *)node, std::forward<Args>(args)...);
         case IRNodeType::Provide:
             return ((T *)this)->visit((const Provide *)node, std::forward<Args>(args)...);
         case IRNodeType::Allocate:

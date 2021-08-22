@@ -235,6 +235,20 @@ public:
         }
     }
 
+    void visit(const BufferLoad *op) override {
+        const BufferLoad *e = expr.as<BufferLoad>();
+        if (result && e && types_match(op->type, e->type) && e->name == op->name && e->alignment == op->alignment) {
+            expr = e->predicate;
+            op->predicate.accept(this);
+            for (size_t i = 0; i < op->index.size(); ++i) {
+              expr = e->index[i];
+              op->index[i].accept(this);
+            }
+        } else {
+            result = false;
+        }
+    }
+
     void visit(const Ramp *op) override {
         const Ramp *e = expr.as<Ramp>();
         if (result && e && e->lanes == op->lanes) {
@@ -473,6 +487,18 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::Load:
         return (((const Load &)a).name == ((const Load &)b).name &&
                 equal_helper(((const Load &)a).index, ((const Load &)b).index));
+    case IRNodeType::BufferLoad:
+        {
+          if (((const BufferLoad &)a).name != ((const BufferLoad &)b).name) {
+            return false;
+          }
+          for (size_t i = 0; i < ((const BufferLoad&)a).index.size(); ++i) {
+            if (!equal_helper(((const BufferLoad&)a).index[i], ((const BufferLoad&)b).index[i])) {
+              return false;
+            }
+          } 
+          return true;
+        }
     case IRNodeType::Ramp:
         return (equal_helper(((const Ramp &)a).base, ((const Ramp &)b).base) &&
                 equal_helper(((const Ramp &)a).stride, ((const Ramp &)b).stride));
@@ -508,6 +534,7 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::For:
     case IRNodeType::Acquire:
     case IRNodeType::Store:
+    case IRNodeType::BufferStore:
     case IRNodeType::Provide:
     case IRNodeType::Allocate:
     case IRNodeType::Free:

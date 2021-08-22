@@ -5,6 +5,7 @@
 #include <future>
 #include <utility>
 
+#include "CodeGen_MLIR.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_PyTorch.h"
@@ -57,6 +58,7 @@ std::map<Output, const OutputInfo> get_output_info(const Target &target) {
         {Output::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {Output::stmt, {"stmt", ".stmt", IsMulti}},
         {Output::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
+        {Output::mlir, {"mlir", ".mlir", IsMulti}},
     };
     return ext;
 }
@@ -651,6 +653,11 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
         Internal::CodeGen_C cg(file,
                                target(),
                                target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
+        cg.compile(*this);
+    }
+    if (contains(output_files, Output::mlir)) {
+        std::ofstream file(output_files.at(Output::mlir));
+        Internal::CodeGen_MLIR cg(file, target());
         cg.compile(*this);
     }
     if (contains(output_files, Output::python_extension)) {

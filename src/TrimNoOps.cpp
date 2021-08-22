@@ -45,6 +45,14 @@ class LoadsFromBuffer : public IRVisitor {
         }
     }
 
+    void visit(const BufferLoad *op) override {
+        if (op->name == buffer) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
     string buffer;
 
 public:
@@ -112,6 +120,40 @@ class IsNoOp : public IRVisitor {
             is_no_op = simplify(common_subexpression_elimination(is_no_op));
             debug(3) << "Anding condition over domain... " << is_no_op << "\n";
             is_no_op = and_condition_over_domain(is_no_op, Scope<Interval>::empty_scope());
+            condition = make_and(condition, is_no_op);
+            debug(3) << "Condition is now " << condition << "\n";
+        }
+    }
+
+    void visit(const BufferStore *op) override {
+        if (op->value.type().is_handle() || is_const_zero(op->predicate)) {
+            condition = const_false();
+        } else {
+            if (is_const_zero(condition)) {
+                return;
+            }
+            // If the value being stored is the same as the value loaded,
+            // this is a no-op
+            debug(3) << "Considering store: " << Stmt(op) << "\n";
+
+            // Early-out: There's no way for that to be true if the
+            // RHS does not load from the buffer being stored to.
+            if (!loads_from_buffer(op->value, op->name)) {
+                condition = const_false();
+                return;
+            }
+
+            Expr equivalent_load = BufferLoad::make(op->value.type(), op->name, op->index,
+                                              Buffer<>(), Parameter(), op->predicate, op->alignment);
+            Expr is_no_op = equivalent_load == op->value;
+            is_no_op = StripIdentities().mutate(is_no_op);
+            // We need to call CSE since sometimes we have "let" stmt on the RHS
+            // that makes the expr harder to solve, i.e. the solver will just give up
+            // and return a conservative false on call to and_condition_over_domain().
+            is_no_op = simplify(common_subexpression_elimination(is_no_op));
+            debug(3) << "Anding condition over domain... " << is_no_op << "\n";
+            is_no_op = and_condition_over_domain(is_no_op, Scope<Interval>::empty_scope());
+            debug(3) << "afteranding condition over domain... " << is_no_op << "\n";
             condition = make_and(condition, is_no_op);
             debug(3) << "Condition is now " << condition << "\n";
         }

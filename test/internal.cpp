@@ -23,6 +23,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, const char **argv) {
+#if !defined(GEN_MULTIDIM_BUFFER)
     IRPrinter::test();
     CodeGen_C::test();
     CodeGen_PyTorch::test();
@@ -41,6 +42,7 @@ int main(int argc, const char **argv) {
     generator_test();
     propagate_estimate_test();
     uniquify_variable_names_test();
+#endif
 
     printf("Success!\n");
     return 0;

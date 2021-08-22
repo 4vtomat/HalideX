@@ -74,6 +74,14 @@ CLANG_VERSION = $(shell $(CLANG) --version)
 
 SANITIZER_FLAGS ?=
 
+EXTERNAL_FLAGS ?=
+ifeq ($(USE_MLIRX), 1)
+EXTERNAL_FLAGS += -DUSE_MLIRX
+endif
+ifeq ($(MULTIDIM_BUFFER), 1)
+EXTERNAL_FLAGS += -DGEN_MULTIDIM_BUFFER
+endif
+
 # TODO: this is suboptimal hackery; we should really add the relevant
 # support libs for the sanitizer(s) as weak symbols in Codegen_LLVM.
 # (Note also that, in general, most Sanitizers work most reliably with an all-Clang
@@ -214,6 +222,7 @@ CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
 CXX_FLAGS += $(RISCV_CXX_FLAGS)
 CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
+CXX_FLAGS += $(EXTERNAL_FLAGS)
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
 # everything with -fno-exceptions.  Without -funwind-tables, libHalide.so fails
@@ -264,6 +273,7 @@ TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # In the tests, some of our expectations change depending on the llvm version
 TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
+TEST_CXX_FLAGS += $(EXTERNAL_FLAGS)
 
 # gcc 4.8 fires a bogus warning on old versions of png.h
 ifneq (,$(findstring g++,$(CXX_VERSION)))
@@ -424,6 +434,7 @@ SOURCE_FILES = \
   CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
+  CodeGen_MLIR.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
@@ -596,6 +607,7 @@ HEADER_FILES = \
   CodeGen_GPU_Dev.h \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
+  CodeGen_MLIR.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
@@ -2307,10 +2319,14 @@ ifeq ($(UNAME), Darwin)
 endif
 
 .PHONY: autoschedulers
+ifneq ($(MULTIDIM_BUFFER), 1)
 autoschedulers: \
 $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) \
 $(DISTRIB_DIR)/lib/libautoschedule_li2018.$(SHARED_EXT) \
 $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT)
+else
+autoschedulers:
+endif
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers

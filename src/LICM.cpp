@@ -35,6 +35,10 @@ class CanLift : public IRVisitor {
         result = false;
     }
 
+    void visit(const BufferLoad *op) override {
+        result = false;
+    }
+
     void visit(const Variable *op) override {
         if (varying.contains(op->name)) {
             result = false;

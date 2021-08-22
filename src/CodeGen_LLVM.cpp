@@ -2351,7 +2351,7 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
         Instruction *load_inst;
         if (vpred != nullptr) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-#if LLVM_VERSION >= 130
+#if LLVM_VERSION >= 130 && !defined(USE_MLIRX)
             load_inst = builder->CreateMaskedLoad(slice_type, vec_ptr, llvm::Align(align_bytes), slice_mask);
 #else
             load_inst = builder->CreateMaskedLoad(vec_ptr, llvm::Align(align_bytes), slice_mask);

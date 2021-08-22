@@ -115,6 +115,13 @@ void IRVisitor::visit(const Load *op) {
     op->index.accept(this);
 }
 
+void IRVisitor::visit(const BufferLoad *op) {
+    op->predicate.accept(this);
+    for (auto& i: op->index) {
+      i.accept(this);
+    }
+}
+
 void IRVisitor::visit(const Ramp *op) {
     op->base.accept(this);
     op->stride.accept(this);
@@ -178,6 +185,14 @@ void IRVisitor::visit(const Store *op) {
     op->predicate.accept(this);
     op->value.accept(this);
     op->index.accept(this);
+}
+
+void IRVisitor::visit(const BufferStore *op) {
+    op->predicate.accept(this);
+    op->value.accept(this);
+    for (auto& i: op->index) {
+      i.accept(this);
+    }
 }
 
 void IRVisitor::visit(const Provide *op) {
@@ -387,6 +402,13 @@ void IRGraphVisitor::visit(const Load *op) {
     include(op->index);
 }
 
+void IRGraphVisitor::visit(const BufferLoad *op) {
+    include(op->predicate);
+    for (auto& i: op->index) {
+      include(i);
+    }
+}
+
 void IRGraphVisitor::visit(const Ramp *op) {
     include(op->base);
     include(op->stride);
@@ -437,6 +459,14 @@ void IRGraphVisitor::visit(const Store *op) {
     include(op->predicate);
     include(op->value);
     include(op->index);
+}
+
+void IRGraphVisitor::visit(const BufferStore *op) {
+    include(op->predicate);
+    include(op->value);
+    for (auto& i: op->index) {
+      include(i);
+    }
 }
 
 void IRGraphVisitor::visit(const Provide *op) {

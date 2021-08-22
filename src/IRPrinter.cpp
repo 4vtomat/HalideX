@@ -663,6 +663,27 @@ void IRPrinter::visit(const Load *op) {
     }
 }
 
+void IRPrinter::visit(const BufferLoad *op) {
+    const bool has_pred = !is_const_one(op->predicate);
+    if (has_pred) {
+        open();
+    }
+    if (!known_type.contains(op->name)) {
+        stream << "(" << op->type << ")";
+    }
+    stream << op->name << "[";
+    for (auto& i: op->index) {
+      print_no_parens(i);
+      stream << ", ";
+    }
+    stream << "]";
+    if (has_pred) {
+        stream << " if ";
+        print(op->predicate);
+        close();
+    }
+}
+
 void IRPrinter::visit(const Ramp *op) {
     stream << "ramp(";
     print_no_parens(op->base);
@@ -787,6 +808,45 @@ void IRPrinter::visit(const Store *op) {
     }
     stream << op->name << "[";
     print_no_parens(op->index);
+    if (show_alignment) {
+        stream << " aligned("
+               << op->alignment.modulus
+               << ", "
+               << op->alignment.remainder << ")";
+    }
+    stream << "] = ";
+    if (const Let *let = op->value.as<Let>()) {
+        // Use some nicer line breaks for containing Lets
+        stream << "\n";
+        indent += 2;
+        print_lets(let);
+        indent -= 2;
+    } else {
+        // Just print the value in-line
+        print_no_parens(op->value);
+    }
+    stream << "\n";
+    if (has_pred) {
+        indent--;
+    }
+}
+
+void IRPrinter::visit(const BufferStore *op) {
+    stream << get_indent();
+    const bool has_pred = !is_const_one(op->predicate);
+    const bool show_alignment = op->value.type().is_vector() && (op->alignment.modulus > 1);
+    if (has_pred) {
+        stream << "predicate (";
+        print_no_parens(op->predicate);
+        stream << ")\n";
+        indent++;
+        stream << get_indent();
+    }
+    stream << op->name << "[";
+    for (auto& i: op->index) {
+      print_no_parens(i);
+      stream << ", ";
+    }
     if (show_alignment) {
         stream << " aligned("
                << op->alignment.modulus

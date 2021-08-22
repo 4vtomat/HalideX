@@ -343,6 +343,50 @@ Stmt Simplify::visit(const Store *op) {
     }
 }
 
+Stmt Simplify::visit(const BufferStore *op) {
+    found_buffer_reference(op->name);
+
+    Expr predicate = mutate(op->predicate, nullptr);
+    Expr value = mutate(op->value, nullptr);
+
+    ExprInfo index_info;
+    std::vector<Expr> index;
+    for (auto& i : op->index) {
+      index.push_back(mutate(i, &index_info));
+    }
+
+    // If the store is fully out of bounds, drop it.
+    // This should only occur inside branches that make the store unreachable,
+    // but perhaps the branch was hard to prove constant true or false. This
+    // provides an alternative mechanism to simplify these unreachable stores.
+    string alloc_extent_name = op->name + ".total_extent_bytes";
+    if (bounds_and_alignment_info.contains(alloc_extent_name)) {
+        if (index_info.max_defined && index_info.max < 0) {
+            in_unreachable = true;
+            return Evaluate::make(unreachable());
+        }
+        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
+        if (alloc_info.max_defined && index_info.min_defined) {
+            int index_min_bytes = index_info.min * op->value.type().bytes();
+            if (index_min_bytes > alloc_info.max) {
+                in_unreachable = true;
+                return Evaluate::make(unreachable());
+            }
+        }
+    }
+
+    ExprInfo base_info;
+    base_info.alignment = ModulusRemainder::intersect(base_info.alignment, index_info.alignment);
+    ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
+
+    if (is_const_zero(predicate)) {
+        // Predicate is always false
+        return Evaluate::make(0);
+    } else {
+        return BufferStore::make(op->name, value, index, op->param, predicate, align);
+    }
+}
+
 Stmt Simplify::visit(const Allocate *op) {
     std::vector<Expr> new_extents;
     bool all_extents_unmodified = true;

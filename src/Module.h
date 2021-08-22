@@ -41,6 +41,7 @@ enum class Output {
     static_library,
     stmt,
     stmt_html,
+    mlir
 };
 
 /** Type of linkage a function in a lowered Halide module can have.

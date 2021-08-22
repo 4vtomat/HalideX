@@ -75,6 +75,7 @@ protected:
     virtual Expr visit(const Not *);
     virtual Expr visit(const Select *);
     virtual Expr visit(const Load *);
+    virtual Expr visit(const BufferLoad *);
     virtual Expr visit(const Ramp *);
     virtual Expr visit(const Broadcast *);
     virtual Expr visit(const Call *);
@@ -87,6 +88,7 @@ protected:
     virtual Stmt visit(const ProducerConsumer *);
     virtual Stmt visit(const For *);
     virtual Stmt visit(const Store *);
+    virtual Stmt visit(const BufferStore *);
     virtual Stmt visit(const Provide *);
     virtual Stmt visit(const Allocate *);
     virtual Stmt visit(const Free *);

@@ -104,6 +104,71 @@ private:
         return idx;
     }
 
+    std::vector<Expr> generate_indices(const string &name, vector<Expr> args,
+                      const Buffer<> &buf, const Parameter &param) {
+        bool internal = realizations.contains(name);
+        std::vector<Expr> idx;
+        for (size_t i = 0; i < args.size(); ++i) {
+          idx.push_back(target.has_large_buffers() ? make_zero(Int(64)) : 0);
+        }
+        vector<Expr> mins(args.size()), strides(args.size());
+
+        for (size_t i = 0; i < args.size(); i++) {
+            strides[i] = make_shape_var(name, "stride", i, buf, param);
+            mins[i] = make_shape_var(name, "min", i, buf, param);
+            if (target.has_large_buffers()) {
+                strides[i] = cast<int64_t>(strides[i]);
+            }
+        }
+
+        Expr zero = target.has_large_buffers() ? make_zero(Int(64)) : 0;
+
+        // We peel off constant offsets so that multiple stencil
+        // taps can share the same base address.
+        std::vector<Expr> constant_term;
+        for (size_t i = 0; i < args.size(); ++i) {
+          constant_term.push_back(zero);
+        }
+        for (size_t i = 0; i < args.size(); i++) {
+            const Add *add = args[i].as<Add>();
+            if (add && is_const(add->b)) {
+                constant_term[i] += add->b;
+                args[i] = add->a;
+            }
+        }
+
+        if (internal) {
+            // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
+            // strategy makes sense when we expect x to cancel with
+            // something in xmin.  We use this for internal allocations.
+            for (size_t i = 0; i < args.size(); i++) {
+                idx[i] += (args[i] - mins[i]);
+            }
+        } else {
+            // f(x, y) -> f[x*stride + y*ystride - (xstride*xmin +
+            // ystride*ymin)]. The idea here is that the last term
+            // will be pulled outside the inner loop. We use this for
+            // external buffers, where the mins and strides are likely
+            // to be symbolic
+          std::vector<Expr> base(args.size(), zero);
+            for (size_t i = 0; i < args.size(); i++) {
+                idx[i] += args[i];
+                base[i] += mins[i];
+            }
+            for (size_t i = 0; i < args.size(); i++) {
+                idx[i] -= base[i];
+            }
+        }
+
+            for (size_t i = 0; i < args.size(); i++) {
+            if (!is_const_zero(constant_term[i])) {
+                idx[i] += constant_term[i];
+            }
+        }
+
+        return idx;
+    }
+
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
@@ -257,8 +322,16 @@ private:
             }
             return result;
         } else {
+#ifdef GEN_MULTIDIM_BUFFER
+            std::vector<Expr> indices = generate_indices(op->name, op->args, Buffer<>(), output_buf);
+            for (auto& i : indices) {
+              i = mutate(i);
+            }
+            return BufferStore::make(op->name, value, std::move(indices), output_buf, const_true(value.type().lanes()), ModulusRemainder());
+#else
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
             return Store::make(op->name, value, idx, output_buf, predicate, ModulusRemainder());
+#endif
         }
     }
 
@@ -308,9 +381,17 @@ private:
                                   op->image,
                                   op->param);
             } else {
+#ifdef GEN_MULTIDIM_BUFFER
+                std::vector<Expr> indices = generate_indices(op->name, op->args, op->image, op->param);
+                for (auto& i : indices) {
+                  i = mutate(i);
+                }
+                return BufferLoad::make(op->type, op->name, std::move(indices), op->image, op->param, const_true(op->type.lanes()), ModulusRemainder());
+#else
                 Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
                 return Load::make(op->type, op->name, idx, op->image, op->param,
                                   const_true(op->type.lanes()), ModulusRemainder());
+#endif
             }
 
         } else {
@@ -410,10 +491,39 @@ class PromoteToMemoryType : public IRMutator {
         }
     }
 
+    Expr visit(const BufferLoad *op) override {
+        Type t = upgrade(op->type);
+        if (t != op->type) {
+          std::vector<Expr> index;
+          for (auto& idx : op->index) {
+            index.push_back(mutate(idx));
+          }
+            return Cast::make(op->type,
+                              BufferLoad::make(t, op->name, std::move(index),
+                                         op->image, op->param, mutate(op->predicate), ModulusRemainder()));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
     Stmt visit(const Store *op) override {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
             return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
+                               op->param, mutate(op->predicate), ModulusRemainder());
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const BufferStore *op) override {
+        Type t = upgrade(op->value.type());
+        if (t != op->value.type()) {
+          std::vector<Expr> index;
+          for (auto& idx : op->index) {
+            index.push_back(mutate(idx));
+          }
+            return BufferStore::make(op->name, Cast::make(t, mutate(op->value)), std::move(index),
                                op->param, mutate(op->predicate), ModulusRemainder());
         } else {
             return IRMutator::visit(op);

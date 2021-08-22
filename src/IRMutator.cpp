@@ -127,6 +127,18 @@ Expr IRMutator::visit(const Load *op) {
                       op->alignment);
 }
 
+Expr IRMutator::visit(const BufferLoad *op) {
+    Expr predicate = mutate(op->predicate);
+    std::vector<Expr> index;
+    for (auto i: op->index) {
+      index.push_back(mutate(i));
+    }
+
+    return BufferLoad::make(op->type, op->name, std::move(index),
+                      op->image, op->param, std::move(predicate),
+                      op->alignment);
+}
+
 Expr IRMutator::visit(const Ramp *op) {
     Expr base = mutate(op->base);
     Expr stride = mutate(op->stride);
@@ -213,6 +225,16 @@ Stmt IRMutator::visit(const Store *op) {
         return op;
     }
     return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
+}
+
+Stmt IRMutator::visit(const BufferStore *op) {
+    Expr predicate = mutate(op->predicate);
+    Expr value = mutate(op->value);
+    std::vector<Expr> index;
+    for (auto& i: op->index) {
+      index.push_back(mutate(i));
+    }
+    return BufferStore::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
 }
 
 Stmt IRMutator::visit(const Provide *op) {

@@ -308,6 +308,8 @@ private:
         }
         stream << close_span();
     }
+    void visit(const BufferLoad *op) override {
+    }
     void visit(const Ramp *op) override {
         stream << open_span("Ramp");
         print_list(symbol("ramp") + "(", {op->base, op->stride, Expr(op->lanes)}, ")");
@@ -458,6 +460,8 @@ private:
         }
         stream << close_span();
         stream << close_div();
+    }
+    void visit(const BufferStore *op) override {
     }
     void visit(const Provide *op) override {
         stream << open_div("Provide WrapLine");

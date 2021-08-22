@@ -60,6 +60,14 @@ class MarkClampedRampsAsLikely : public IRMutator {
         return expr;
     }
 
+    Expr visit(const BufferLoad *op) override {
+        bool old_in_index = in_index;
+        in_index = true;
+        Expr expr = IRMutator::visit(op);
+        in_index = old_in_index;
+        return expr;
+    }
+
     Stmt visit(const Store *op) override {
         bool old_in_index = in_index;
         in_index = true;
@@ -72,6 +80,23 @@ class MarkClampedRampsAsLikely : public IRMutator {
         } else {
             return Store::make(op->name, value, index, op->param, predicate, op->alignment);
         }
+    }
+
+    Stmt visit(const BufferStore *op) override {
+        bool old_in_index = in_index;
+        in_index = true;
+        std::vector<Expr> index;
+        for (size_t i = 0; i < op->index.size(); ++i) {
+          index.push_back(mutate(op->index[i]));
+        }
+        in_index = old_in_index;
+        Expr value = mutate(op->value);
+        Expr predicate = mutate(op->predicate);
+        // if (predicate.same_as(op->predicate) && index.same_as(op->index) && value.same_as(op->value)) {
+        //     return op;
+        // } else {
+            return BufferStore::make(op->name, value, index, op->param, predicate, op->alignment);
+        // }
     }
 
     bool in_index = false;
@@ -218,6 +243,14 @@ class ExprUsesInvalidBuffers : public IRVisitor {
     const Scope<> &invalid_buffers;
 
     void visit(const Load *op) override {
+        if (invalid_buffers.contains(op->name)) {
+            invalid = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const BufferLoad *op) override {
         if (invalid_buffers.contains(op->name)) {
             invalid = true;
         } else {
@@ -503,6 +536,9 @@ protected:
 
     void visit(const Load *op) override {
     }
+
+    void visit(const BufferLoad *op) override {
+    }
 };
 
 bool contains_warp_synchronous_logic(const Stmt &s) {
@@ -777,6 +813,10 @@ class ExprContainsLoad : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Load *op) override {
+        result = true;
+    }
+
+    void visit(const BufferLoad *op) override {
         result = true;
     }
 

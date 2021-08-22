@@ -79,6 +79,22 @@ private:
         }
     }
 
+    Expr visit(const BufferLoad *op) override {
+        if (!collecting) {
+            return op;
+        }
+
+        // If we hit a load from the buffer we're trying to collect
+        // stores for, stop collecting to avoid reordering loads and
+        // stores from the same buffer.
+        if (op->name == store_name) {
+            collecting = false;
+            return op;
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
     Stmt visit(const Store *op) override {
         if (!collecting) {
             return op;
@@ -112,6 +128,55 @@ private:
             // reorder stores, stop collecting.
             collecting = false;
             return stmt;
+        }
+
+        // This store is good, collect it and replace with a no-op.
+        stores.emplace_back(op);
+        stmt = Evaluate::make(0);
+
+        // Because we collected this store, we need to save the
+        // potential lets since the last collected store.
+        let_stmts.insert(let_stmts.end(), potential_lets.begin(), potential_lets.end());
+        potential_lets.clear();
+        return stmt;
+    }
+
+    Stmt visit(const BufferStore *op) override {
+        if (!collecting) {
+            return op;
+        }
+
+        // By default, do nothing.
+        Stmt stmt = op;
+
+        if (stores.size() >= (size_t)max_stores) {
+            // Already have enough stores.
+            collecting = false;
+            return stmt;
+        }
+
+        // Make sure this Store doesn't do anything that causes us to
+        // stop collecting.
+        stmt = IRMutator::visit(op);
+        if (!collecting) {
+            return stmt;
+        }
+
+        if (op->name != store_name) {
+            // Not a store to the buffer we're looking for.
+            return stmt;
+        }
+
+
+        for (size_t i = 0; i < op->index.size(); ++i) {
+          const Ramp *r = op->index[i].as<Ramp>();
+          if (!r || !is_const(r->stride, store_stride)) {
+              // Store doesn't store to the ramp we're looking
+              // for. Can't interleave it. Since we don't want to
+              // reorder stores, stop collecting.
+              collecting = false;
+              return stmt;
+          }
         }
 
         // This store is good, collect it and replace with a no-op.
@@ -241,6 +306,24 @@ private:
                 align = ModulusRemainder();
             }
             return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align);
+        }
+    }
+
+    Expr visit(const BufferLoad *op) override {
+        if (op->type.is_scalar()) {
+            return op;
+        } else {
+            Type t = op->type.with_lanes(new_lanes);
+            ModulusRemainder align = op->alignment;
+            // TODO: Figure out the alignment of every nth lane
+            if (starting_lane != 0) {
+                align = ModulusRemainder();
+            }
+            std::vector<Expr> index;
+            for (size_t i = 0; i < op->index.size(); ++i) {
+              index.push_back(mutate(op->index[i]));
+            }
+            return BufferLoad::make(t, op->name, std::move(index), op->image, op->param, mutate(op->predicate), align);
         }
     }
 
@@ -573,6 +656,51 @@ class Interleaver : public IRMutator {
         return expr;
     }
 
+    Expr visit(const BufferLoad *op) override {
+        bool old_should_deinterleave = should_deinterleave;
+        int old_num_lanes = num_lanes;
+
+        should_deinterleave = false;
+        std::vector<Expr> idx;
+        for (size_t i = 0; i < op->index.size(); ++i) {
+          idx.push_back(mutate(op->index[i]));
+        }
+        bool should_deinterleave_idx = should_deinterleave;
+
+        should_deinterleave = false;
+        Expr predicate = mutate(op->predicate);
+        bool should_deinterleave_predicate = should_deinterleave;
+
+        Expr expr;
+        if (should_deinterleave_idx && (should_deinterleave_predicate || is_const_one(predicate))) {
+            // If we want to deinterleave both the index and predicate
+            // (or the predicate is one), then deinterleave the
+            // resulting load.
+            expr = BufferLoad::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+            expr = deinterleave_expr(expr);
+        } else if (should_deinterleave_idx) {
+            // If we only want to deinterleave the index and not the
+            // predicate, deinterleave the index prior to the load.
+            std::vector<Expr> idx_;
+            for (size_t i = 0; i < op->index.size(); ++i) {
+              idx_.push_back(deinterleave_expr(idx_[i]));
+            }
+            expr = BufferLoad::make(op->type, op->name, idx_, op->image, op->param, predicate, op->alignment);
+        } else if (should_deinterleave_predicate) {
+            // Similarly, deinterleave the predicate prior to the load
+            // if we don't want to deinterleave the index.
+            predicate = deinterleave_expr(predicate);
+            expr = BufferLoad::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+        } else {
+            expr = BufferLoad::make(op->type, op->name, idx, op->image, op->param, predicate, op->alignment);
+        }
+
+        should_deinterleave = old_should_deinterleave;
+        num_lanes = old_num_lanes;
+        return expr;
+    }
+
+
     Stmt visit(const Store *op) override {
         bool old_should_deinterleave = should_deinterleave;
         int old_num_lanes = num_lanes;
@@ -596,6 +724,43 @@ class Interleaver : public IRMutator {
         }
 
         Stmt stmt = Store::make(op->name, value, idx, op->param, predicate, op->alignment);
+
+        should_deinterleave = old_should_deinterleave;
+        num_lanes = old_num_lanes;
+
+        return stmt;
+    }
+
+    Stmt visit(const BufferStore *op) override {
+        bool old_should_deinterleave = should_deinterleave;
+        int old_num_lanes = num_lanes;
+
+        should_deinterleave = false;
+        std::vector<Expr> idx;
+        for (size_t i = 0; i < op->index.size(); ++i) {
+          idx.push_back(mutate(op->index[i]));
+        }
+        if (should_deinterleave) {
+            std::vector<Expr> idx_;
+            for (size_t i = 0; i < op->index.size(); ++i) {
+              idx_.push_back(deinterleave_expr(idx_[i]));
+            }
+            idx = idx_;
+        }
+
+        should_deinterleave = false;
+        Expr value = mutate(op->value);
+        if (should_deinterleave) {
+            value = deinterleave_expr(value);
+        }
+
+        should_deinterleave = false;
+        Expr predicate = mutate(op->predicate);
+        if (should_deinterleave) {
+            predicate = deinterleave_expr(predicate);
+        }
+
+        Stmt stmt = BufferStore::make(op->name, value, idx, op->param, predicate, op->alignment);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;

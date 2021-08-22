@@ -76,6 +76,7 @@ private:
     void visit(const Not *) override;
     void visit(const Select *) override;
     void visit(const Load *) override;
+    void visit(const BufferLoad *) override;
     void visit(const Ramp *) override;
     void visit(const Broadcast *) override;
     void visit(const Call *) override;
@@ -86,6 +87,7 @@ private:
     void visit(const For *) override;
     void visit(const Acquire *) override;
     void visit(const Store *) override;
+    void visit(const BufferStore *) override;
     void visit(const Provide *) override;
     void visit(const Allocate *) override;
     void visit(const Free *) override;
@@ -418,6 +420,17 @@ void IRComparer::visit(const Load *op) {
     compare_scalar(e->alignment.remainder, op->alignment.remainder);
 }
 
+void IRComparer::visit(const BufferLoad *op) {
+    const BufferLoad *e = expr.as<BufferLoad>();
+    compare_names(op->name, e->name);
+    compare_expr(e->predicate, op->predicate);
+    for (size_t i = 0; i < op->index.size(); ++i) {
+      compare_expr(e->index[i], op->index[i]);
+    }
+    compare_scalar(e->alignment.modulus, op->alignment.modulus);
+    compare_scalar(e->alignment.remainder, op->alignment.remainder);
+}
+
 void IRComparer::visit(const Ramp *op) {
     const Ramp *e = expr.as<Ramp>();
     // No need to compare width because we already compared types
@@ -496,6 +509,20 @@ void IRComparer::visit(const Store *op) {
     compare_expr(s->predicate, op->predicate);
     compare_expr(s->value, op->value);
     compare_expr(s->index, op->index);
+    compare_scalar(s->alignment.modulus, op->alignment.modulus);
+    compare_scalar(s->alignment.remainder, op->alignment.remainder);
+}
+
+void IRComparer::visit(const BufferStore *op) {
+    const BufferStore *s = stmt.as<BufferStore>();
+
+    compare_names(s->name, op->name);
+
+    compare_expr(s->predicate, op->predicate);
+    compare_expr(s->value, op->value);
+    for (size_t i = 0; i < s->index.size(); ++i) {
+      compare_expr(s->index[i], op->index[i]);
+    }
     compare_scalar(s->alignment.modulus, op->alignment.modulus);
     compare_scalar(s->alignment.remainder, op->alignment.remainder);
 }

@@ -21,7 +21,17 @@ class CountVarUses : public IRVisitor {
         IRVisitor::visit(op);
     }
 
+    void visit(const BufferLoad *op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
     void visit(const Store *op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
+    void visit(const BufferStore *op) override {
         var_uses[op->name]++;
         IRVisitor::visit(op);
     }

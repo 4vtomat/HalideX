@@ -1074,6 +1074,32 @@ private:
         }
     }
 
+    void visit(const BufferLoad *op) override {
+        TRACK_BOUNDS_INTERVAL;
+        std::vector<Expr> index;
+        bool temp = true;
+        for (size_t i = 0; i < op->index.size(); ++i) {
+          op->index[i].accept(this);
+          index.emplace_back(interval.min);
+          if (!(!const_bound && interval.is_single_point() && is_const_one(op->predicate))) {
+            temp = false;
+          }
+        }
+
+        // if (!const_bound && interval.is_single_point() && is_const_one(op->predicate)) {
+        if (temp) {
+            // If the index is const and it is not a predicated load,
+            // we can return the load of that index
+
+            Expr load_min = BufferLoad::make(op->type.element_of(), op->name, index,
+                           op->image, op->param, const_true(), ModulusRemainder());
+            interval = Interval::single_point(load_min);
+        } else {
+            // Otherwise use the bounds of the type
+            bounds_of_type(op->type);
+        }
+    }
+
     void visit(const Ramp *op) override {
         TRACK_BOUNDS_INTERVAL;
         // Treat the ramp lane as a free variable
@@ -1621,6 +1647,10 @@ private:
     }
 
     void visit(const Store *) override {
+        internal_error << "Bounds of statement\n";
+    }
+
+    void visit(const BufferStore *) override {
         internal_error << "Bounds of statement\n";
     }
 

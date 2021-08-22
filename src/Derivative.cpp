@@ -78,6 +78,9 @@ protected:
     void visit(const Load *op) override {
         internal_error << "Encounter unexpected expression \"Load\" when differentiating.";
     }
+    void visit(const BufferLoad *op) override {
+        internal_error << "Encounter unexpected expression \"Load\" when differentiating.";
+    }
     void visit(const Ramp *op) override {
         internal_error << "Encounter unexpected expression \"Ramp\" when differentiating.";
     }
@@ -103,6 +106,9 @@ protected:
         internal_error << "Encounter unexpected statement \"For\" when differentiating.";
     }
     void visit(const Store *op) override {
+        internal_error << "Encounter unexpected statement \"Store\" when differentiating.";
+    }
+    void visit(const BufferStore *op) override {
         internal_error << "Encounter unexpected statement \"Store\" when differentiating.";
     }
     void visit(const Provide *op) override {

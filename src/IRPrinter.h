@@ -170,6 +170,7 @@ protected:
     void visit(const Not *) override;
     void visit(const Select *) override;
     void visit(const Load *) override;
+    void visit(const BufferLoad *) override;
     void visit(const Ramp *) override;
     void visit(const Broadcast *) override;
     void visit(const Call *) override;
@@ -180,6 +181,7 @@ protected:
     void visit(const For *) override;
     void visit(const Acquire *) override;
     void visit(const Store *) override;
+    void visit(const BufferStore *) override;
     void visit(const Provide *) override;
     void visit(const Allocate *) override;
     void visit(const Free *) override;
