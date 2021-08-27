@@ -95,3 +95,4 @@ src/.tags_sorted_by_file
 /CMakeSettings.json
 /venv/
 /cmake-build-*/
+tags

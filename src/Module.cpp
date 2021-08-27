@@ -656,8 +656,7 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
         cg.compile(*this);
     }
     if (contains(output_files, Output::mlir)) {
-        std::ofstream file(output_files.at(Output::mlir));
-        Internal::CodeGen_MLIR cg(file, target());
+        Internal::CodeGen_MLIR cg(target());
         cg.compile(*this);
     }
     if (contains(output_files, Output::python_extension)) {
